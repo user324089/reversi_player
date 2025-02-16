@@ -1,5 +1,6 @@
 import torch
 from tqdm import tqdm
+import os
 
 BLACK = 0
 WHITE = 1
@@ -305,14 +306,16 @@ def main ():
 
     torch.manual_seed (0);
     model: Reversi_AI = Reversi_AI(2,100)
+    optim = torch.optim.Adam (model.parameters(), lr=1e-1)
 
-    print ('testing model')
-    starting_accuracy = test_model (model, 100)
-    print ('start accuracy:', starting_accuracy)
-    print ('training model')
-    train_AI (model, 100, 10, torch.optim.Adam (model.parameters()))
-    print ('testing model')
-    end_accuracy = test_model (model, 100)
-    print ('end accuracy:', end_accuracy)
+    if os.path.exists('model_weights.pth'):
+        model.load_state_dict(torch.load('model_weights.pth', weights_only=True))
+
+    while (True):
+        train_AI (model, 100, 10, optim)
+        accuracy = test_model (model, 100)
+        print ('end accuracy:', accuracy)
+        torch.save(model.state_dict(), 'model_weights.pth')
+
 
 main()
