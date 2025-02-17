@@ -5,14 +5,6 @@ import copy
 import random
 from reversi import *
 
-BLACK = 0
-WHITE = 1
-SIDE = 8
-NUM_PLAYERS = 2
-STARTING_BLACK_FIELDS = [SIDE * 3 + 3, SIDE*4+4]
-STARTING_WHITE_FIELDS = [SIDE * 3 + 4, SIDE*4+3]
-FIELD_CHARACTERS = ['B','W']
-
 RANDOM_MOVE_PROBABILITY=0.03
 GAMMA = 0.99
 
