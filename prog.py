@@ -1,6 +1,8 @@
 import torch
 from tqdm import tqdm
 import os
+import copy
+import random
 
 BLACK = 0
 WHITE = 1
@@ -9,6 +11,9 @@ NUM_PLAYERS = 2
 STARTING_BLACK_FIELDS = [SIDE * 3 + 3, SIDE*4+4]
 STARTING_WHITE_FIELDS = [SIDE * 3 + 4, SIDE*4+3]
 FIELD_CHARACTERS = ['B','W']
+
+RANDOM_MOVE_PROBABILITY=0.03
+GAMMA = 0.99
 
 STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING_WHITE_FIELDS)
 
@@ -30,6 +35,10 @@ class Reversi:
         self.other_player_board[STARTING_WHITE_FIELDS] = 1
 
         self.current_player = BLACK
+
+        self.finished: bool = False
+
+        self.calculated_possibilities: torch.Tensor | None = None
 
     def count_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> int:
         # Function counts the number of other player's tokens before current player token.
@@ -90,6 +99,10 @@ class Reversi:
         scores: list[torch.Tensor] = [torch.sum(fields[player]) for player in range (NUM_PLAYERS)]
         return (self.current_player, scores)
 
+    def get_player_num_tokens (self, player: int) -> torch.Tensor:
+        _, num_tokens = self.get_game_state()
+        return num_tokens[player]
+
     def _place_helper (self, place_x: int, place_y: int, is_checking: bool) -> bool:
         # If is_checking is true, checks if current player flips any tokens by placing
         # theirs in the given position. Otherwise flips all tokens from the current
@@ -138,31 +151,47 @@ class Reversi:
         self.current_player_board, self.other_player_board = self.other_player_board, self.current_player_board
         self.current_player = BLACK+WHITE - self.current_player
 
+        self.calculated_possibilities = None
+
     def place (self, place_x: int, place_y: int) -> None:
         # Plays a turn by the current player placing token in given place
 
         self.current_player_board[place_y * self.board_side + place_x] = 1
         self._place_helper (place_x, place_y, False)
+        self.calculated_possibilities = None
+
         if (torch.sum (self.other_player_board) == 0):
             self.current_player_board[:] = 1
+            self.finished=True
             return
         self.change_turn()
+
+        if (torch.sum (self.current_player_board + self.other_player_board) == self.board_side * self.board_side):
+            self.finished = True
+            return
+
         if (torch.sum(self.get_possibilities()) == 0):
             self.change_turn()
 
+            if (torch.sum(self.get_possibilities()) == 0):
+                self.finished=True
+
     def get_possibilities (self) -> torch.Tensor:
         # Returns the places where current player can place their token
+        if self.calculated_possibilities is not None:
+            return self.calculated_possibilities.clone()
 
-        possibilities: torch.Tensor = torch.empty (self.board_side ** 2)
+        self.calculated_possibilities = torch.empty (self.board_side ** 2)
         for place_x in range (self.board_side):
             for place_y in range (self.board_side):
-                possibilities[place_y * self.board_side + place_x] = self.can_place (place_x, place_y)
-        return possibilities
+                self.calculated_possibilities[place_y * self.board_side + place_x] = self.can_place (place_x, place_y)
 
-    def count_free_spaces (self) -> torch.Tensor:
-        # Counts spaces not containing a token
+        return self.calculated_possibilities.clone()
 
-        return self.board_side ** 2 - torch.sum (self.current_player_board + self.other_player_board)
+    def get_possibility_inf_mask (self) -> torch.Tensor:
+        mask = torch.zeros (self.board_side ** 2)
+        mask[self.get_possibilities() == 0] = float ('-inf')
+        return mask
 
     def place_from_probabilities (self, probabilities: torch.Tensor) -> int:
         # Plays a turn by the current player by sampling from given probabilities of
@@ -172,7 +201,7 @@ class Reversi:
         masked_probabilities = mask * probabilities
         masked_probabilities_sum = torch.sum (masked_probabilities)
         if (masked_probabilities_sum == 0):
-            masked_probabilities[:] = 1/(SIDE*SIDE)
+            masked_probabilities[:] = mask/torch.sum(mask)
         else:
             masked_probabilities /= masked_probabilities_sum
         dist = torch.distributions.categorical.Categorical (masked_probabilities)
@@ -181,8 +210,14 @@ class Reversi:
         self.place (index % self.board_side, index // self.board_side)
         return index
 
+    def place_optimal (self, values: torch.Tensor):
+        mask = self.get_possibility_inf_mask()
+        index = int(torch.argmax(values + mask))
+        self.place (index % self.board_side, index // self.board_side)
+        return index
+
     def is_finished (self):
-        return self.count_free_spaces() == 0
+        return self.finished
 
     def get_winner (self) -> int:
         _, score = self.get_game_state()
@@ -215,7 +250,7 @@ class Reversi:
             print ()
 
 
-class Reversi_AI (torch.nn.Module):
+class Reversi_AI_policy (torch.nn.Module):
 
     def __init__ (self, num_hidden_layers: int, hidden_layer_width: int) -> None:
         super().__init__()
@@ -251,7 +286,36 @@ class Reversi_AI (torch.nn.Module):
         for parameter in self.last_layer.parameters():
             print (parameter.grad)
 
-def test_model (model: Reversi_AI, num_games: int):
+class Reversi_AI_DQN (torch.nn.Module):
+
+    def __init__ (self, num_hidden_layers: int, hidden_layer_width: int) -> None:
+        super().__init__()
+
+        assert (num_hidden_layers >= 1)
+
+        self.first_layer = torch.nn.Sequential(
+                torch.nn.Linear (SIDE*SIDE*2, hidden_layer_width),
+                torch.nn.ReLU()
+                )
+
+        self.middle_layers = torch.nn.Sequential (
+                *[
+                    torch.nn.Sequential (
+                        torch.nn.Linear (hidden_layer_width, hidden_layer_width),
+                        torch.nn.ReLU(),
+                        )
+                    for _ in range (num_hidden_layers - 1)
+                    ]
+                )
+        self.last_layer = torch.nn.Linear (hidden_layer_width, SIDE*SIDE)
+
+    def forward (self, x) -> torch.Tensor:
+        x = self.first_layer (x)
+        x = self.middle_layers(x)
+        x = self.last_layer (x)
+        return x
+
+def test_model_policy (model: Reversi_AI_policy, num_games: int):
     num_won: float = 0
     for _ in tqdm(range (num_games)):
         game: Reversi = Reversi()
@@ -265,8 +329,24 @@ def test_model (model: Reversi_AI, num_games: int):
             num_won += 1
     return num_won / num_games
 
+def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
 
-def train_AI (model: Reversi_AI, num_epochs: int, games_per_epoch, optimiser: torch.optim.Adam):
+    model.eval()
+    num_won: float = 0
+    for _ in tqdm(range (num_games)):
+        game: Reversi = Reversi()
+        model_player = BLACK + WHITE - game.current_player
+        while not game.is_finished():
+            if (game.current_player == model_player):
+                game.place_optimal(model(game.get_board_state()))
+            else:
+                game.place_from_probabilities(torch.nn.functional.softmax(torch.randn (SIDE*SIDE), dim=0))
+        if (game.get_winner () == model_player):
+            num_won += 1
+    return num_won / num_games
+
+
+def train_AI_policy (model: Reversi_AI_policy, num_epochs: int, games_per_epoch, optimiser: torch.optim.AdamW):
     for _ in tqdm(range (num_epochs)):
 
         optimiser.zero_grad()
@@ -277,15 +357,17 @@ def train_AI (model: Reversi_AI, num_epochs: int, games_per_epoch, optimiser: to
             game: Reversi = Reversi()
             states: list[tuple[int, list[torch.Tensor]]] = []
             log_probs: list[torch.Tensor] = []
+
             while (not game.is_finished()):
                 states.append (game.get_game_state())
                 board_state = game.get_board_state()
                 move_probabilities = model(board_state)
-                move_taken = game.place_from_probabilities (move_probabilities)
-                move_taken_one_hot = torch.nn.functional.one_hot (torch.tensor(move_taken),
-                                                                  SIDE*SIDE)
 
-                log_probs.append (torch.log(torch.sum (move_probabilities * move_taken_one_hot)))
+                move_taken = game.place_from_probabilities (move_probabilities)
+
+                move_probability = move_probabilities[move_taken:move_taken+1].squeeze()
+
+                log_probs.append (torch.log(move_probability))
 
             _, end_state = game.get_game_state()
 
@@ -301,19 +383,67 @@ def train_AI (model: Reversi_AI, num_epochs: int, games_per_epoch, optimiser: to
 
         optimiser.step()
 
+def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.AdamW):
+
+    model.train()
+
+    opponent_model = copy.deepcopy(model)
+
+    for _ in tqdm(range (num_games)):
+
+
+        game = Reversi ()
+
+        if (random.randrange(0,2) == 0):
+            game.place_optimal(opponent_model(game.get_board_state()))
+
+        LEARNING_MODEL_PLAYER = game.current_player
+
+        while (not game.is_finished()):
+
+            before_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
+
+            q_scores = model(game.get_board_state())
+
+            if (random.random() < RANDOM_MOVE_PROBABILITY):
+                move_taken = game.place_from_probabilities (torch.ones(SIDE*SIDE))
+            else:
+                move_taken = game.place_optimal (q_scores)
+
+            while ((not game.is_finished()) and game.current_player != LEARNING_MODEL_PLAYER):
+                game.place_optimal(opponent_model(game.get_board_state()))
+
+            after_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
+            target: torch.Tensor = after_move_score - before_move_score
+
+            if not game.is_finished():
+                target += torch.max (game.get_possibility_inf_mask() + model(game.get_board_state()))
+
+            chosen_score = q_scores[move_taken:move_taken+1].squeeze()
+            loss = (chosen_score - target)**2 / 2
+
+            optimiser.zero_grad()
+
+            loss.backward()
+
+            optimiser.step()
+
 
 def main ():
 
-    torch.manual_seed (0);
-    model: Reversi_AI = Reversi_AI(2,100)
-    optim = torch.optim.Adam (model.parameters(), lr=1e-1)
+    model = Reversi_AI_DQN(3,200)
+    optim = torch.optim.AdamW (model.parameters(), lr=1e-5)
 
     if os.path.exists('model_weights.pth'):
         model.load_state_dict(torch.load('model_weights.pth', weights_only=True))
 
+    torch.manual_seed (0);
+    accuracy = test_model_DQN (model, 100)
+    print ('start accuracy:', accuracy)
     while (True):
-        train_AI (model, 100, 10, optim)
-        accuracy = test_model (model, 100)
+        torch.manual_seed (0);
+        train_AI_DQN (model, 1000, optim)
+        accuracy = test_model_DQN (model, 100)
         print ('end accuracy:', accuracy)
         torch.save(model.state_dict(), 'model_weights.pth')
 
