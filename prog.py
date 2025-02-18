@@ -6,7 +6,6 @@ import random
 from reversi import *
 
 RANDOM_MOVE_PROBABILITY=0.03
-GAMMA = 0.99
 
 if torch.cuda.is_available():
     DEVICE='cuda'
