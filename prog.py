@@ -97,9 +97,9 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
             if (move_version_rand_float < RANDOM_MOVE_PROBABILITY):
                 move_taken = game.place_from_probabilities (torch.ones(SIDE*SIDE))
             elif (move_version_rand_float < RANDOM_MOVE_PROBABILITY + EXPLORING_MOVE_PROBABILITY):
-                field_values = game.get_possibility_inf_mask() + model(game.get_board_state())
+                field_values = game.get_possibility_inf_mask() + q_scores
                 explored_bound = torch.topk (field_values, k=EXPLORING_K)[0][-1]
-                move_taken = game.place_from_probabilities (field_values >= explored_bound)
+                move_taken = game.place_from_probabilities ((field_values >= explored_bound).to(DEVICE))
             else:
                 move_taken = game.place_optimal (q_scores)
 
