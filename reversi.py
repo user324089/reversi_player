@@ -267,9 +267,9 @@ class Reversi:
     def is_finished (self):
         return self.finished
 
-    def get_winner (self) -> int:
+    def get_winner(self) -> int:
         _, score = self.get_game_state()
-        return int(torch.argmax(torch.tensor(score)))
+        return int(torch.argmax(score))
 
     def write (self, show_possibilities: bool = True) -> None:
 
