@@ -8,6 +8,11 @@ from reversi import *
 RANDOM_MOVE_PROBABILITY=0.03
 GAMMA = 0.99
 
+if torch.cuda.is_available():
+    DEVICE='cuda'
+else:
+    DEVICE='cpu'
+
 STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING_WHITE_FIELDS)
 class Linear_skip_block (torch.nn.Module):
 
@@ -53,7 +58,7 @@ def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
     model.eval()
     num_won: float = 0
     for _ in tqdm(range (num_games)):
-        game: Reversi = Reversi()
+        game: Reversi = Reversi(device=DEVICE)
         model_player = BLACK + WHITE - game.current_player
         while not game.is_finished():
             if (game.current_player == model_player):
@@ -73,7 +78,7 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
     for _ in tqdm(range (num_games)):
 
 
-        game = Reversi ()
+        game = Reversi (device=DEVICE)
 
         if (random.randrange(0,2) == 0):
             game.place_optimal(opponent_model(game.get_board_state()))
@@ -96,6 +101,7 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
 
             after_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
             target: torch.Tensor = after_move_score - before_move_score
+            target = target.to(DEVICE)
 
             if not game.is_finished():
                 target += torch.max (game.get_possibility_inf_mask() + model(game.get_board_state()))
@@ -112,7 +118,8 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
 
 def main ():
 
-    model = Reversi_AI_DQN(5,400)
+    model = Reversi_AI_DQN(3,400)
+    model.to(DEVICE)
     optim = torch.optim.AdamW (model.parameters())
 
     if os.path.exists('model_weights.pth'):

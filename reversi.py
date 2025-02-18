@@ -15,7 +15,7 @@ STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING
 
 class Reversi:
 
-    def __init__(self) -> None:
+    def __init__(self, device='cpu') -> None:
         self.board_side = SIDE
 
         # Board is zeros where there is no token, and ones where there is token.
@@ -35,6 +35,8 @@ class Reversi:
         self.finished: bool = False
 
         self.calculated_possibilities: torch.Tensor | None = None
+
+        self.device=device
 
     def count_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> int:
         # Function counts the number of other player's tokens before current player token.
@@ -71,7 +73,7 @@ class Reversi:
 
     def get_board_state (self) -> torch.Tensor:
         # Returns the whole board state as a tensor
-        return torch.cat ((self.current_player_board, self.other_player_board))
+        return torch.cat ((self.current_player_board, self.other_player_board)).to(self.device)
 
     def get_labeled_fields (self) -> list[torch.Tensor]:
         # Creates a list that indexed by player color returns their board
@@ -185,7 +187,7 @@ class Reversi:
         return self.calculated_possibilities.clone()
 
     def get_possibility_inf_mask (self) -> torch.Tensor:
-        mask = torch.zeros (self.board_side ** 2)
+        mask = torch.zeros (self.board_side ** 2).to(self.device)
         mask[self.get_possibilities() == 0] = float ('-inf')
         return mask
 
