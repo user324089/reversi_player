@@ -250,42 +250,6 @@ class Reversi:
             print ()
 
 
-class Reversi_AI_policy (torch.nn.Module):
-
-    def __init__ (self, num_hidden_layers: int, hidden_layer_width: int) -> None:
-        super().__init__()
-
-        assert (num_hidden_layers >= 1)
-
-        self.first_layer = torch.nn.Sequential(
-                torch.nn.Linear (SIDE*SIDE*2, hidden_layer_width),
-                torch.nn.ReLU())
-
-        self.middle_layers = torch.nn.Sequential (
-                *[
-                    torch.nn.Sequential (
-                        torch.nn.Linear (hidden_layer_width, hidden_layer_width),
-                        torch.nn.ReLU()
-                        )
-                    for _ in range (num_hidden_layers - 1)
-                    ]
-                )
-        self.last_layer = torch.nn.Linear (hidden_layer_width, SIDE*SIDE)
-        self.soft_max = torch.nn.Softmax (dim=0)
-
-    def forward (self, x) -> torch.Tensor:
-        x = self.first_layer (x)
-        x = self.middle_layers(x)
-        x = self.last_layer (x)
-        x = self.soft_max (x)
-        return x
-
-    def print_first (self):
-        print (*self.first_layer.parameters())
-        print ('last layer grad:')
-        for parameter in self.last_layer.parameters():
-            print (parameter.grad)
-
 class Reversi_AI_DQN (torch.nn.Module):
 
     def __init__ (self, num_hidden_layers: int, hidden_layer_width: int) -> None:
@@ -315,20 +279,6 @@ class Reversi_AI_DQN (torch.nn.Module):
         x = self.last_layer (x)
         return x
 
-def test_model_policy (model: Reversi_AI_policy, num_games: int):
-    num_won: float = 0
-    for _ in tqdm(range (num_games)):
-        game: Reversi = Reversi()
-        model_player = BLACK + WHITE - game.current_player
-        while not game.is_finished():
-            if (game.current_player == model_player):
-                game.place_from_probabilities(model(game.get_board_state()))
-            else:
-                game.place_from_probabilities(torch.nn.functional.softmax(torch.randn (SIDE*SIDE), dim=0))
-        if (game.get_winner () == model_player):
-            num_won += 1
-    return num_won / num_games
-
 def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
 
     model.eval()
@@ -344,44 +294,6 @@ def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
         if (game.get_winner () == model_player):
             num_won += 1
     return num_won / num_games
-
-
-def train_AI_policy (model: Reversi_AI_policy, num_epochs: int, games_per_epoch, optimiser: torch.optim.AdamW):
-    for _ in tqdm(range (num_epochs)):
-
-        optimiser.zero_grad()
-
-        loss: torch.Tensor = torch.tensor(0, dtype=torch.float)
-
-        for _ in range (games_per_epoch):
-            game: Reversi = Reversi()
-            states: list[tuple[int, list[torch.Tensor]]] = []
-            log_probs: list[torch.Tensor] = []
-
-            while (not game.is_finished()):
-                states.append (game.get_game_state())
-                board_state = game.get_board_state()
-                move_probabilities = model(board_state)
-
-                move_taken = game.place_from_probabilities (move_probabilities)
-
-                move_probability = move_probabilities[move_taken:move_taken+1].squeeze()
-
-                log_probs.append (torch.log(move_probability))
-
-            _, end_state = game.get_game_state()
-
-            for j, (log_prob, (current_player, current_state)) in enumerate(zip (log_probs, states, strict=True)):
-                baseline = torch.tensor((STARTING_NUM_FREE_FIELDS - j)/2)
-                total_reward: float = float(end_state[current_player] - current_state[current_player] - baseline)
-
-                loss -= log_prob * total_reward
-
-        loss /= games_per_epoch
-
-        loss.backward()
-
-        optimiser.step()
 
 def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.AdamW):
 
