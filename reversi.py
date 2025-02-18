@@ -242,7 +242,7 @@ class Reversi:
         # legal fields
 
         mask = self.get_possibilities ()
-        masked_probabilities = mask * probabilities
+        masked_probabilities = mask * probabilities.to('cpu')
         masked_probabilities_sum = torch.sum (masked_probabilities)
         if (masked_probabilities_sum == 0):
             masked_probabilities[:] = mask/torch.sum(mask)
