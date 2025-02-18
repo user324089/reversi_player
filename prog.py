@@ -249,13 +249,24 @@ class Reversi:
                     print ('.', end='')
             print ()
 
+class Linear_skip_block (torch.nn.Module):
+
+    def __init__ (self, num_neurons: int) -> None:
+        super().__init__()
+        self.first_layers = torch.nn.Sequential (
+                torch.nn.Linear (num_neurons, num_neurons),
+                torch.nn.ReLU(),
+                torch.nn.Linear (num_neurons, num_neurons)
+                )
+        self.relu = torch.nn.ReLU()
+
+    def forward (self, x: torch.Tensor) -> torch.Tensor:
+        return self.relu(x + self.first_layers (x))
 
 class Reversi_AI_DQN (torch.nn.Module):
 
-    def __init__ (self, num_hidden_layers: int, hidden_layer_width: int) -> None:
+    def __init__ (self, num_blocks: int, hidden_layer_width: int) -> None:
         super().__init__()
-
-        assert (num_hidden_layers >= 1)
 
         self.first_layer = torch.nn.Sequential(
                 torch.nn.Linear (SIDE*SIDE*2, hidden_layer_width),
@@ -264,13 +275,11 @@ class Reversi_AI_DQN (torch.nn.Module):
 
         self.middle_layers = torch.nn.Sequential (
                 *[
-                    torch.nn.Sequential (
-                        torch.nn.Linear (hidden_layer_width, hidden_layer_width),
-                        torch.nn.ReLU(),
-                        )
-                    for _ in range (num_hidden_layers - 1)
+                    Linear_skip_block (hidden_layer_width)
+                    for _ in range (num_blocks)
                     ]
                 )
+
         self.last_layer = torch.nn.Linear (hidden_layer_width, SIDE*SIDE)
 
     def forward (self, x) -> torch.Tensor:
@@ -343,8 +352,8 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
 
 def main ():
 
-    model = Reversi_AI_DQN(3,200)
-    optim = torch.optim.AdamW (model.parameters(), lr=1e-5)
+    model = Reversi_AI_DQN(5,400)
+    optim = torch.optim.AdamW (model.parameters())
 
     if os.path.exists('model_weights.pth'):
         model.load_state_dict(torch.load('model_weights.pth', weights_only=True))
