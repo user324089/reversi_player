@@ -265,13 +265,7 @@ class Reversi:
 
     def get_winner (self) -> int:
         _, score = self.get_game_state()
-        max_score = score[0]
-        max_score_index = 0
-        for i in range (1, len(score)):
-            if (score[i] > max_score):
-                max_score = score[i]
-                max_score_index = i
-        return max_score_index
+        return int(torch.argmax(torch.tensor(score)))
 
     def write (self, show_possibilities: bool = True) -> None:
 
