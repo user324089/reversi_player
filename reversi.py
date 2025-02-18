@@ -148,8 +148,9 @@ class Reversi:
         return (self.current_player, scores)
 
     def get_player_num_tokens (self, player: int) -> torch.Tensor:
-        _, num_tokens = self.get_game_state()
-        return num_tokens[player]
+        return torch.tensor(float(self.current_player_bitboard.bit_count() 
+                                  if player == self.current_player 
+                                  else self.other_player_bitboard.bit_count()))
 
     def _place_helper (self, place_x: int, place_y: int, is_checking: bool) -> bool:
         # If is_checking is true, checks if current player flips any tokens by placing
