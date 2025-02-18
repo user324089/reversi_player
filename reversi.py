@@ -124,7 +124,10 @@ class Reversi:
         # as a list indexed by their color
 
         fields: list[torch.Tensor] = self.get_labeled_fields()
-        scores: list[torch.Tensor] = [torch.sum(fields[player]) for player in range (NUM_PLAYERS)]
+        
+        scores: list[torch.Tensor] = [torch.Tensor(), torch.Tensor()]
+        scores[self.current_player] = torch.tensor(float(self.current_player_bitboard.bit_count()))
+        scores[self.current_player ^ 1] = torch.tensor(float(self.other_player_bitboard.bit_count()))
         return (self.current_player, scores)
 
     def get_player_num_tokens (self, player: int) -> torch.Tensor:
