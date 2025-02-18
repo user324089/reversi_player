@@ -113,14 +113,9 @@ class Reversi:
     def get_labeled_fields (self) -> list[torch.Tensor]:
         # Creates a list that indexed by player color returns their board
 
-        fields: list[torch.Tensor] = [torch.Tensor() for _ in range(NUM_PLAYERS)]
-
-        if (self.current_player == BLACK):
-            fields[BLACK] = self.current_player_board
-            fields[WHITE] = self.other_player_board
-        else:
-            fields[WHITE] = self.current_player_board
-            fields[BLACK] = self.other_player_board
+        fields: list[torch.Tensor] = [torch.Tensor(), torch.Tensor()]
+        fields[self.current_player] = self.current_player_board
+        fields[self.current_player ^ 1] = self.other_player_board
 
         return fields
 
