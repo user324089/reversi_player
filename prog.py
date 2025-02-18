@@ -6,6 +6,8 @@ import random
 from reversi import *
 
 RANDOM_MOVE_PROBABILITY=0.03
+EXPLORING_MOVE_PROBABILITY=0.1
+EXPLORING_K = 3
 RANDOM_OPPONENT_MOVE_PROBABILITY=0.2
 
 if torch.cuda.is_available():
@@ -91,8 +93,13 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
 
             q_scores = model(game.get_board_state())
 
-            if (random.random() < RANDOM_MOVE_PROBABILITY):
+            move_version_rand_float = random.random()
+            if (move_version_rand_float < RANDOM_MOVE_PROBABILITY):
                 move_taken = game.place_from_probabilities (torch.ones(SIDE*SIDE))
+            elif (move_version_rand_float < RANDOM_MOVE_PROBABILITY + EXPLORING_MOVE_PROBABILITY):
+                field_values = game.get_possibility_inf_mask() + model(game.get_board_state())
+                explored_bound = torch.topk (field_values, k=EXPLORING_K)[0][-1]
+                move_taken = game.place_from_probabilities (field_values >= explored_bound)
             else:
                 move_taken = game.place_optimal (q_scores)
 
