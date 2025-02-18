@@ -6,6 +6,7 @@ import random
 from reversi import *
 
 RANDOM_MOVE_PROBABILITY=0.03
+RANDOM_OPPONENT_MOVE_PROBABILITY=0.2
 
 if torch.cuda.is_available():
     DEVICE='cuda'
@@ -96,7 +97,10 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
                 move_taken = game.place_optimal (q_scores)
 
             while ((not game.is_finished()) and game.current_player != LEARNING_MODEL_PLAYER):
-                game.place_optimal(opponent_model(game.get_board_state()))
+                if (random.random() < RANDOM_OPPONENT_MOVE_PROBABILITY):
+                    game.place_from_probabilities (torch.ones(SIDE*SIDE))
+                else:
+                    game.place_optimal(opponent_model(game.get_board_state()))
 
             after_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
             target: torch.Tensor = after_move_score - before_move_score
