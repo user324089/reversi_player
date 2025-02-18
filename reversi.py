@@ -1,4 +1,5 @@
 import torch
+import bitboard as bb
 
 BLACK = 0
 WHITE = 1
@@ -7,9 +8,6 @@ NUM_PLAYERS = 2
 STARTING_BLACK_FIELDS = [SIDE * 3 + 3, SIDE*4+4]
 STARTING_WHITE_FIELDS = [SIDE * 3 + 4, SIDE*4+3]
 FIELD_CHARACTERS = ['B','W']
-
-RANDOM_MOVE_PROBABILITY=0.03
-GAMMA = 0.99
 
 STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING_WHITE_FIELDS)
 
@@ -30,6 +28,11 @@ class Reversi:
         self.current_player_board[STARTING_BLACK_FIELDS] = 1
         self.other_player_board[STARTING_WHITE_FIELDS] = 1
 
+        self.current_player_bitboard: int = \
+            (1 << STARTING_BLACK_FIELDS[0]) | (1 << STARTING_BLACK_FIELDS[1])
+        self.other_player_bitboard: int = \
+            (1 << STARTING_WHITE_FIELDS[0]) | (1 << STARTING_WHITE_FIELDS[1])
+
         self.current_player = BLACK
 
         self.finished: bool = False
@@ -37,6 +40,40 @@ class Reversi:
         self.calculated_possibilities: torch.Tensor | None = None
 
         self.device=device
+
+    def update_board(self, captured: int) -> None:
+        for pos in range(64):
+            if (captured >> pos) & 1:
+                self.current_player_board[pos] = 1
+                self.other_player_board[pos] = 0
+
+    # places token on bitboard
+    # returns the bitboard of all new tokens belonging to the current player
+    def place_bitboard(self, index: int) -> int:
+
+        captured = 0
+        for shift_func in bb.shift_funcs:
+            mask = shift_func(1 << index)
+            captured_tmp = 0
+
+            while mask & self.other_player_bitboard:
+                captured_tmp |= mask
+                mask = shift_func(mask)
+
+            if mask & self.current_player_bitboard:
+                captured |= captured_tmp
+
+
+        self.current_player_bitboard |= 1 << index
+        self.current_player_bitboard ^= captured
+        self.other_player_bitboard ^= captured
+        return captured | (1 << index)
+
+    def equal_boards(self) -> bool:
+        board_curr = bb.board_to_bitboard(self.current_player_board)
+        board_other = bb.board_to_bitboard(self.other_player_board)
+        return board_curr == self.current_player_bitboard \
+               and board_other == self.other_player_bitboard
 
     def count_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> int:
         # Function counts the number of other player's tokens before current player token.
@@ -147,6 +184,7 @@ class Reversi:
         # Changes the current player
 
         self.current_player_board, self.other_player_board = self.other_player_board, self.current_player_board
+        self.current_player_bitboard, self.other_player_bitboard = self.other_player_bitboard, self.current_player_bitboard
         self.current_player = BLACK+WHITE - self.current_player
 
         self.calculated_possibilities = None
@@ -154,8 +192,9 @@ class Reversi:
     def place (self, place_x: int, place_y: int) -> None:
         # Plays a turn by the current player placing token in given place
 
-        self.current_player_board[place_y * self.board_side + place_x] = 1
-        self._place_helper (place_x, place_y, False)
+        new_tokens = self.place_bitboard(place_y * 8 + place_x)
+        self.update_board(new_tokens)
+
         self.calculated_possibilities = None
 
         if (torch.sum (self.other_player_board) == 0):
