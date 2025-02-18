@@ -1,4 +1,4 @@
-from torch import Tensor
+import torch
 
 # Edge masks to prevent illegal shifts
 RIGHT_EDGE = 0x0101010101010101
@@ -32,9 +32,16 @@ def shift_down_right(board: int) -> int:
 
 shift_funcs = [shift_left, shift_right, shift_up, shift_down, shift_up_left, shift_up_right, shift_down_left, shift_down_right]
 
-def board_to_bitboard(board: Tensor) -> int:
+def board_to_bitboard(board: torch.Tensor) -> int:
     bitboard = 0
     for pos in range(64):
         if board[pos] == 1:
             bitboard |= 1 << pos
     return bitboard
+
+def bitboard_to_board(bitboard: int) -> torch.Tensor:
+    board = torch.zeros(64)
+    for pos in range(64):
+        if bitboard & (1 << pos):
+            board[pos] = 1
+    return board
