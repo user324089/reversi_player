@@ -50,7 +50,6 @@ class Reversi:
     # places token on bitboard
     # returns the bitboard of all new tokens belonging to the current player
     def place_bitboard(self, index: int) -> int:
-
         captured = 0
         for shift_func in bb.shift_funcs:
             mask = shift_func(1 << index)
@@ -62,7 +61,6 @@ class Reversi:
 
             if mask & self.current_player_bitboard:
                 captured |= captured_tmp
-
 
         self.current_player_bitboard |= 1 << index
         self.current_player_bitboard ^= captured
@@ -197,13 +195,14 @@ class Reversi:
 
         self.calculated_possibilities = None
 
-        if (torch.sum (self.other_player_board) == 0):
+        if self.other_player_bitboard == 0:
             self.current_player_board[:] = 1
+            self.current_player_bitboard = (1 << 64) - 1
             self.finished=True
             return
         self.change_turn()
 
-        if (torch.sum (self.current_player_board + self.other_player_board) == self.board_side * self.board_side):
+        if (self.current_player_bitboard | self.other_player_bitboard) == ((1 << 64) - 1):
             self.finished = True
             return
 
