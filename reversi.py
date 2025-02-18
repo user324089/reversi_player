@@ -66,6 +66,20 @@ class Reversi:
         self.current_player_bitboard ^= captured
         self.other_player_bitboard ^= captured
         return captured | (1 << index)
+    
+    def get_all_moves(self) -> int:
+        # Returns a bitboard will all possible moves for the current player
+        empty = ~(self.current_player_bitboard | self.other_player_bitboard) & ((1 << 64) - 1)
+        moves = 0
+        for shift_func in bb.shift_funcs:
+            # Only consider cells that are adjacent to the other player's tokens
+            mask = shift_func(self.current_player_bitboard) & self.other_player_bitboard
+
+            while mask:
+                moves |= shift_func(mask) & empty
+                mask = shift_func(mask) & self.other_player_bitboard
+
+        return moves
 
     def equal_boards(self) -> bool:
         board_curr = bb.board_to_bitboard(self.current_player_board)
@@ -215,11 +229,7 @@ class Reversi:
         if self.calculated_possibilities is not None:
             return self.calculated_possibilities.clone()
 
-        self.calculated_possibilities = torch.empty (self.board_side ** 2)
-        for place_x in range (self.board_side):
-            for place_y in range (self.board_side):
-                self.calculated_possibilities[place_y * self.board_side + place_x] = self.can_place (place_x, place_y)
-
+        self.calculated_possibilities = bb.bitboard_to_board(self.get_all_moves())
         return self.calculated_possibilities.clone()
 
     def get_possibility_inf_mask (self) -> torch.Tensor:
