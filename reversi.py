@@ -200,10 +200,10 @@ class Reversi:
 
         self.calculated_possibilities = None
 
-    def place (self, place_x: int, place_y: int) -> None:
+    def place (self, index: int) -> None:
         # Plays a turn by the current player placing token in given place
 
-        new_tokens = self.place_bitboard(place_y * 8 + place_x)
+        new_tokens = self.place_bitboard(index)
         self.update_board(new_tokens)
 
         self.calculated_possibilities = None
@@ -252,13 +252,13 @@ class Reversi:
         dist = torch.distributions.categorical.Categorical (masked_probabilities)
         index = int(dist.sample())
 
-        self.place (index % self.board_side, index // self.board_side)
+        self.place(index)
         return index
 
     def place_optimal (self, values: torch.Tensor):
         mask = self.get_possibility_inf_mask()
         index = int(torch.argmax(values + mask))
-        self.place (index % self.board_side, index // self.board_side)
+        self.place(index)
         return index
 
     def is_finished (self):
