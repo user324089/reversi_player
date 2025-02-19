@@ -66,7 +66,7 @@ def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
             if (game.current_player == model_player):
                 game.place_optimal(model(game.get_board_state()))
             else:
-                game.place_from_probabilities(torch.nn.functional.softmax(torch.randn (SIDE*SIDE), dim=0))
+                game.make_random_move()
         if (game.get_winner () == model_player):
             num_won += 1
     return num_won / num_games
@@ -95,7 +95,7 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
 
             move_version_rand_float = random.random()
             if (move_version_rand_float < RANDOM_MOVE_PROBABILITY):
-                move_taken = game.place_from_probabilities (torch.ones(SIDE*SIDE))
+                move_taken = game.make_random_move()
             elif (move_version_rand_float < RANDOM_MOVE_PROBABILITY + EXPLORING_MOVE_PROBABILITY):
                 field_values = game.get_possibility_inf_mask() + q_scores
                 explored_bound = torch.topk (field_values, k=EXPLORING_K)[0][-1]
@@ -105,7 +105,7 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_games: int, optimiser: torch.optim.
 
             while ((not game.is_finished()) and game.current_player != LEARNING_MODEL_PLAYER):
                 if (random.random() < RANDOM_OPPONENT_MOVE_PROBABILITY):
-                    game.place_from_probabilities (torch.ones(SIDE*SIDE))
+                    game.make_random_move()
                 else:
                     game.place_optimal(opponent_model(game.get_board_state()))
 

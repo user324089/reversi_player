@@ -183,6 +183,9 @@ class Reversi:
         self.place(index)
         return index
 
+    def make_random_move (self) -> int:
+        return self.place_from_probabilities (torch.ones (SIDE**2))
+
     def place_optimal (self, values: torch.Tensor):
         mask = self.get_possibility_inf_mask()
         index = int(torch.argmax(values + mask))
