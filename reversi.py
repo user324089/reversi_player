@@ -155,6 +155,7 @@ class Reversi:
     def get_possibilities (self) -> torch.Tensor:
         # Returns the places where current player can place their token
         self.generate_possibilities()
+        assert self.calculated_possibilities is not None
         return self.calculated_possibilities.clone()
 
     def get_possibility_inf_mask(self) -> torch.Tensor:
