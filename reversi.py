@@ -1,4 +1,5 @@
 import torch
+import bitboard as bb
 
 BLACK = 0
 WHITE = 1
@@ -13,19 +14,22 @@ STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING
 class Reversi:
 
     def __init__(self, device='cpu') -> None:
-        self.board_side = SIDE
-
         # Board is zeros where there is no token, and ones where there is token.
         # current_player_board is the board of currently deciding player's tokens,
         # other_player_board is the board of the other player's tokens
 
         # Initialise boards to zeros
-        self.current_player_board = torch.zeros (self.board_side**2)
-        self.other_player_board = torch.zeros (self.board_side**2)
+        self.current_player_board = torch.zeros(64)
+        self.other_player_board = torch.zeros(64)
 
         # Set the starting fields to ones
         self.current_player_board[STARTING_BLACK_FIELDS] = 1
         self.other_player_board[STARTING_WHITE_FIELDS] = 1
+
+        self.current_player_bitboard: int = \
+            (1 << STARTING_BLACK_FIELDS[0]) | (1 << STARTING_BLACK_FIELDS[1])
+        self.other_player_bitboard: int = \
+            (1 << STARTING_WHITE_FIELDS[0]) | (1 << STARTING_WHITE_FIELDS[1])
 
         self.current_player = BLACK
 
@@ -35,38 +39,51 @@ class Reversi:
 
         self.device=device
 
-    def count_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> int:
-        # Function counts the number of other player's tokens before current player token.
-        # place_index is the beginning place where we begin counting
-        # index offset is the offset we need to advance to get to next token in line
-        # num_steps is the number of steps we can go before getting to the end of the board
+    def update_board(self, captured: int) -> None:
+        for pos in range(64):
+            if (captured >> pos) & 1:
+                self.current_player_board[pos] = 1
+                self.other_player_board[pos] = 0
 
-        num_seen = 0
-        current_index: int = place_index + index_offset
+    # places token on bitboard
+    # returns the bitboard of all new tokens belonging to the current player
+    def place_bitboard(self, index: int) -> int:
+        captured = 0
+        for shift_func in bb.shift_funcs:
+            mask = shift_func(1 << index)
+            captured_tmp = 0
 
-        for _ in range (num_steps):
-            if (self.other_player_board[current_index] > 0):
-                num_seen += 1
-            elif (self.current_player_board[current_index] > 0):
-                return num_seen
-            else:
-                return 0
-            current_index += index_offset
-        return 0
+            while mask & self.other_player_bitboard:
+                captured_tmp |= mask
+                mask = shift_func(mask)
 
-    def place_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> None:
-        # Flips tokens in a straight line. Variables named the same as in count_in_direction
-        # Assumes the placing is valid
+            if mask & self.current_player_bitboard:
+                captured |= captured_tmp
 
-        current_index = place_index + index_offset
+        self.current_player_bitboard |= 1 << index
+        self.current_player_bitboard ^= captured
+        self.other_player_bitboard ^= captured
+        return captured | (1 << index)
+    
+    def get_all_moves(self) -> int:
+        # Returns a bitboard will all possible moves for the current player
+        empty = ~(self.current_player_bitboard | self.other_player_bitboard) & ((1 << 64) - 1)
+        moves = 0
+        for shift_func in bb.shift_funcs:
+            # Only consider cells that are adjacent to the other player's tokens
+            mask = shift_func(self.current_player_bitboard) & self.other_player_bitboard
 
-        for _ in range (num_steps):
-            if (self.other_player_board[current_index] > 0):
-                self.current_player_board[current_index] = 1
-                self.other_player_board[current_index] = 0
-            else:
-                return
-            current_index += index_offset
+            while mask:
+                moves |= shift_func(mask) & empty
+                mask = shift_func(mask) & self.other_player_bitboard
+
+        return moves
+
+    def equal_boards(self) -> bool:
+        board_curr = bb.board_to_bitboard(self.current_player_board)
+        board_other = bb.board_to_bitboard(self.other_player_board)
+        return board_curr == self.current_player_bitboard \
+               and board_other == self.other_player_bitboard
 
     def get_board_state (self) -> torch.Tensor:
         # Returns the whole board state as a tensor
@@ -74,94 +91,53 @@ class Reversi:
 
     def get_labeled_fields (self) -> list[torch.Tensor]:
         # Creates a list that indexed by player color returns their board
-
-        fields: list[torch.Tensor] = [torch.Tensor() for _ in range(NUM_PLAYERS)]
-
-        if (self.current_player == BLACK):
-            fields[BLACK] = self.current_player_board
-            fields[WHITE] = self.other_player_board
-        else:
-            fields[WHITE] = self.current_player_board
-            fields[BLACK] = self.other_player_board
-
+        fields: list[torch.Tensor] = [torch.Tensor(), torch.Tensor()]
+        fields[self.current_player] = self.current_player_board
+        fields[self.current_player ^ 1] = self.other_player_board
         return fields
 
-    def get_game_state (self) -> tuple [int, list[torch.Tensor]]:
-        # Returns current player and the number of tokens on the board of each player
-        # as a list indexed by their color
+    def get_game_scores(self) -> torch.Tensor:
+        # Returns the number of tokens on the board of each player as a tensor
+        scores = torch.empty(2)
+        scores[self.current_player] = torch.tensor(float(self.current_player_bitboard.bit_count()))
+        scores[self.current_player ^ 1] = torch.tensor(float(self.other_player_bitboard.bit_count()))
+        return scores
 
-        fields: list[torch.Tensor] = self.get_labeled_fields()
-        scores: list[torch.Tensor] = [torch.sum(fields[player]) for player in range (NUM_PLAYERS)]
-        return (self.current_player, scores)
+    def get_game_state (self) -> tuple[int, torch.Tensor]:
+        # Returns current player and the number of tokens 
+        # on the board of each player as a tensor
+        return (self.current_player, self.get_game_scores())
 
     def get_player_num_tokens (self, player: int) -> torch.Tensor:
-        _, num_tokens = self.get_game_state()
-        return num_tokens[player]
-
-    def _place_helper (self, place_x: int, place_y: int, is_checking: bool) -> bool:
-        # If is_checking is true, checks if current player flips any tokens by placing
-        # theirs in the given position. Otherwise flips all tokens from the current
-        # position
-
-        x_places = [place_x, self.board_side, self.board_side - 1 - place_x]
-        y_places = [place_y, self.board_side, self.board_side - 1 - place_y]
-        offsets = [-1,0,1]
-
-        place_index = place_y * self.board_side + place_x
-
-        num_changed = 0
-
-        for x in range (3):
-            for y in range (3):
-
-                index_offset = offsets[y] * self.board_side + offsets[x]
-
-                if (index_offset == 0):
-                    continue
-
-                num_steps = min(x_places[x], y_places[y])
-
-                num_in_direction = self.count_in_direction (place_index, index_offset, num_steps)
-                num_changed += num_in_direction
-
-                if (num_in_direction > 0):
-                    if (is_checking):
-                        return True
-                    else:
-                        self.place_in_direction (place_index, index_offset, num_steps)
-
-        return (num_changed > 0)
-
-    def can_place (self, place_x: int, place_y: int) -> float:
-        # Checks if current player can place a token in given field and returns 1 if yes, otherwise 0
-
-        place_index = place_y * self.board_side + place_x
-        if (self.current_player_board [place_index] + self.other_player_board[place_index] > 0):
-            return 0
-        return float(self._place_helper (place_x, place_y, True))
+        return torch.tensor(float(self.current_player_bitboard.bit_count() 
+                                  if player == self.current_player 
+                                  else self.other_player_bitboard.bit_count()))
 
     def change_turn (self) -> None:
         # Changes the current player
 
         self.current_player_board, self.other_player_board = self.other_player_board, self.current_player_board
-        self.current_player = BLACK+WHITE - self.current_player
+        self.current_player_bitboard, self.other_player_bitboard = self.other_player_bitboard, self.current_player_bitboard
+        self.current_player = self.current_player ^ 1
 
         self.calculated_possibilities = None
 
-    def place (self, place_x: int, place_y: int) -> None:
+    def place (self, index: int) -> None:
         # Plays a turn by the current player placing token in given place
 
-        self.current_player_board[place_y * self.board_side + place_x] = 1
-        self._place_helper (place_x, place_y, False)
+        new_tokens = self.place_bitboard(index)
+        self.update_board(new_tokens)
+
         self.calculated_possibilities = None
 
-        if (torch.sum (self.other_player_board) == 0):
+        if self.other_player_bitboard == 0:
             self.current_player_board[:] = 1
+            self.current_player_bitboard = (1 << 64) - 1
             self.finished=True
             return
         self.change_turn()
 
-        if (torch.sum (self.current_player_board + self.other_player_board) == self.board_side * self.board_side):
+        if (self.current_player_bitboard | self.other_player_bitboard) == ((1 << 64) - 1):
             self.finished = True
             return
 
@@ -171,22 +147,23 @@ class Reversi:
             if (torch.sum(self.get_possibilities()) == 0):
                 self.finished=True
 
+    def generate_possibilities(self) -> None:
+        # Generates the places where current player can place their token
+        if self.calculated_possibilities is None:
+            self.calculated_possibilities = bb.bitboard_to_board(self.get_all_moves())
+
     def get_possibilities (self) -> torch.Tensor:
         # Returns the places where current player can place their token
-        if self.calculated_possibilities is not None:
-            return self.calculated_possibilities.clone()
-
-        self.calculated_possibilities = torch.empty (self.board_side ** 2)
-        for place_x in range (self.board_side):
-            for place_y in range (self.board_side):
-                self.calculated_possibilities[place_y * self.board_side + place_x] = self.can_place (place_x, place_y)
-
+        self.generate_possibilities()
         return self.calculated_possibilities.clone()
 
-    def get_possibility_inf_mask (self) -> torch.Tensor:
-        mask = torch.zeros (self.board_side ** 2).to(self.device)
-        mask[self.get_possibilities() == 0] = float ('-inf')
-        return mask
+    def get_possibility_inf_mask(self) -> torch.Tensor:
+        self.generate_possibilities()
+        return torch.where(
+            self.calculated_possibilities == 0,
+            torch.tensor(float('-inf')),
+            torch.tensor(0.0)
+        )
 
     def place_from_probabilities (self, probabilities: torch.Tensor) -> int:
         # Plays a turn by the current player by sampling from given probabilities of
@@ -202,27 +179,20 @@ class Reversi:
         dist = torch.distributions.categorical.Categorical (masked_probabilities)
         index = int(dist.sample())
 
-        self.place (index % self.board_side, index // self.board_side)
+        self.place(index)
         return index
 
     def place_optimal (self, values: torch.Tensor):
         mask = self.get_possibility_inf_mask()
         index = int(torch.argmax(values + mask))
-        self.place (index % self.board_side, index // self.board_side)
+        self.place(index)
         return index
 
     def is_finished (self):
         return self.finished
 
-    def get_winner (self) -> int:
-        _, score = self.get_game_state()
-        max_score = score[0]
-        max_score_index = 0
-        for i in range (1, len(score)):
-            if (score[i] > max_score):
-                max_score = score[i]
-                max_score_index = i
-        return max_score_index
+    def get_winner(self) -> int:
+        return int(torch.argmax(self.get_game_scores()))
 
     def write (self, show_possibilities: bool = True) -> None:
 
@@ -232,13 +202,13 @@ class Reversi:
 
         print ('current player:', FIELD_CHARACTERS[self.current_player])
 
-        for y in range (self.board_side):
-            for x in range (self.board_side):
-                if (fields[BLACK][self.board_side * y + x] > 0):
+        for y in range (SIDE):
+            for x in range (SIDE):
+                if (fields[BLACK][SIDE * y + x] > 0):
                     print (FIELD_CHARACTERS[BLACK], end='')
-                elif (fields[WHITE][self.board_side * y + x] > 0):
+                elif (fields[WHITE][SIDE * y + x] > 0):
                     print (FIELD_CHARACTERS[WHITE], end='')
-                elif (show_possibilities and possibilities[self.board_side * y + x] > 0):
+                elif (show_possibilities and possibilities[SIDE * y + x] > 0):
                     print ('X', end='')
                 else:
                     print ('.', end='')
