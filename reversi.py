@@ -87,39 +87,6 @@ class Reversi:
         return board_curr == self.current_player_bitboard \
                and board_other == self.other_player_bitboard
 
-    def count_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> int:
-        # Function counts the number of other player's tokens before current player token.
-        # place_index is the beginning place where we begin counting
-        # index offset is the offset we need to advance to get to next token in line
-        # num_steps is the number of steps we can go before getting to the end of the board
-
-        num_seen = 0
-        current_index: int = place_index + index_offset
-
-        for _ in range (num_steps):
-            if (self.other_player_board[current_index] > 0):
-                num_seen += 1
-            elif (self.current_player_board[current_index] > 0):
-                return num_seen
-            else:
-                return 0
-            current_index += index_offset
-        return 0
-
-    def place_in_direction (self, place_index: int, index_offset: int, num_steps: int) -> None:
-        # Flips tokens in a straight line. Variables named the same as in count_in_direction
-        # Assumes the placing is valid
-
-        current_index = place_index + index_offset
-
-        for _ in range (num_steps):
-            if (self.other_player_board[current_index] > 0):
-                self.current_player_board[current_index] = 1
-                self.other_player_board[current_index] = 0
-            else:
-                return
-            current_index += index_offset
-
     def get_board_state (self) -> torch.Tensor:
         # Returns the whole board state as a tensor
         return torch.cat ((self.current_player_board, self.other_player_board)).to(self.device)
@@ -138,7 +105,6 @@ class Reversi:
         scores[self.current_player ^ 1] = torch.tensor(float(self.other_player_bitboard.bit_count()))
         return scores
 
-
     def get_game_state (self) -> tuple[int, torch.Tensor]:
         # Returns current player and the number of tokens 
         # on the board of each player as a tensor
@@ -148,48 +114,6 @@ class Reversi:
         return torch.tensor(float(self.current_player_bitboard.bit_count() 
                                   if player == self.current_player 
                                   else self.other_player_bitboard.bit_count()))
-
-    def _place_helper (self, place_x: int, place_y: int, is_checking: bool) -> bool:
-        # If is_checking is true, checks if current player flips any tokens by placing
-        # theirs in the given position. Otherwise flips all tokens from the current
-        # position
-
-        x_places = [place_x, self.board_side, self.board_side - 1 - place_x]
-        y_places = [place_y, self.board_side, self.board_side - 1 - place_y]
-        offsets = [-1,0,1]
-
-        place_index = place_y * self.board_side + place_x
-
-        num_changed = 0
-
-        for x in range (3):
-            for y in range (3):
-
-                index_offset = offsets[y] * self.board_side + offsets[x]
-
-                if (index_offset == 0):
-                    continue
-
-                num_steps = min(x_places[x], y_places[y])
-
-                num_in_direction = self.count_in_direction (place_index, index_offset, num_steps)
-                num_changed += num_in_direction
-
-                if (num_in_direction > 0):
-                    if (is_checking):
-                        return True
-                    else:
-                        self.place_in_direction (place_index, index_offset, num_steps)
-
-        return (num_changed > 0)
-
-    def can_place (self, place_x: int, place_y: int) -> float:
-        # Checks if current player can place a token in given field and returns 1 if yes, otherwise 0
-
-        place_index = place_y * self.board_side + place_x
-        if (self.current_player_board [place_index] + self.other_player_board[place_index] > 0):
-            return 0
-        return float(self._place_helper (place_x, place_y, True))
 
     def change_turn (self) -> None:
         # Changes the current player
