@@ -9,6 +9,8 @@ STARTING_BLACK_FIELDS = [SIDE * 3 + 3, SIDE*4+4]
 STARTING_WHITE_FIELDS = [SIDE * 3 + 4, SIDE*4+3]
 FIELD_CHARACTERS = ['B','W']
 
+DRAW = 2
+
 STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING_WHITE_FIELDS)
 
 class Reversi:
@@ -196,6 +198,9 @@ class Reversi:
         return self.finished
 
     def get_winner(self) -> int:
+        scores = self.get_game_scores()
+        if scores[0] == scores[1]:
+            return DRAW
         return int(torch.argmax(self.get_game_scores()))
 
     def write (self, show_possibilities: bool = True) -> None:

@@ -11,8 +11,11 @@ EXPLORING_K = 3
 RANDOM_OPPONENT_MOVE_PROBABILITY=0.2
 
 BEGINNING_RANDOM_MOVE_MAX_COUNT = 40
-REPLAY_BUFFER_SIZE = 1000
-LEARNING_BATCH_SIZE = 100
+REPLAY_BUFFER_SIZE = 3000
+LEARNING_BATCH_SIZE = 500
+
+WINNING_REWARD = 40
+LOSING_REWARD = -40
 
 if torch.cuda.is_available():
     DEVICE='cuda'
@@ -140,13 +143,18 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_moves: int, target_net_delay: int, 
             else:
                 game.place_optimal(opponent_model(game.get_board_state()))
 
-        after_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
-        reward_dataset[i%REPLAY_BUFFER_SIZE] =  after_move_score - before_move_score
+        #after_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
+        reward_dataset[i%REPLAY_BUFFER_SIZE] = 0 #after_move_score - before_move_score
         is_finished_dataset[i%REPLAY_BUFFER_SIZE] = game.is_finished()
         next_state_dataset[i%REPLAY_BUFFER_SIZE] = game.get_board_state()
         next_state_valid_mask_dataset[i%REPLAY_BUFFER_SIZE] = game.get_possibility_inf_mask()
 
         if (game.is_finished()):
+            if game.get_winner() == LEARNING_MODEL_PLAYER:
+                reward_dataset[i%REPLAY_BUFFER_SIZE] += WINNING_REWARD
+            elif game.get_winner() == (LEARNING_MODEL_PLAYER^1):
+                reward_dataset[i%REPLAY_BUFFER_SIZE] += LOSING_REWARD
+
             game = randomize_game()
             LEARNING_MODEL_PLAYER = game.current_player
 
@@ -168,7 +176,7 @@ def train_AI_DQN (model: Reversi_AI_DQN, num_moves: int, target_net_delay: int, 
 
 def main ():
 
-    model = Reversi_AI_DQN(2,200)
+    model = Reversi_AI_DQN(3,200)
     model.to(DEVICE)
     optim = torch.optim.AdamW (model.parameters())
 
