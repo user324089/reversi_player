@@ -14,15 +14,13 @@ STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING
 class Reversi:
 
     def __init__(self, device='cpu') -> None:
-        self.board_side = SIDE
-
         # Board is zeros where there is no token, and ones where there is token.
         # current_player_board is the board of currently deciding player's tokens,
         # other_player_board is the board of the other player's tokens
 
         # Initialise boards to zeros
-        self.current_player_board = torch.zeros (self.board_side**2)
-        self.other_player_board = torch.zeros (self.board_side**2)
+        self.current_player_board = torch.zeros(64)
+        self.other_player_board = torch.zeros(64)
 
         # Set the starting fields to ones
         self.current_player_board[STARTING_BLACK_FIELDS] = 1
@@ -204,13 +202,13 @@ class Reversi:
 
         print ('current player:', FIELD_CHARACTERS[self.current_player])
 
-        for y in range (self.board_side):
-            for x in range (self.board_side):
-                if (fields[BLACK][self.board_side * y + x] > 0):
+        for y in range (SIDE):
+            for x in range (SIDE):
+                if (fields[BLACK][SIDE * y + x] > 0):
                     print (FIELD_CHARACTERS[BLACK], end='')
-                elif (fields[WHITE][self.board_side * y + x] > 0):
+                elif (fields[WHITE][SIDE * y + x] > 0):
                     print (FIELD_CHARACTERS[WHITE], end='')
-                elif (show_possibilities and possibilities[self.board_side * y + x] > 0):
+                elif (show_possibilities and possibilities[SIDE * y + x] > 0):
                     print ('X', end='')
                 else:
                     print ('.', end='')
