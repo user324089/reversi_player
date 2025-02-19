@@ -159,11 +159,13 @@ class Reversi:
         self.generate_possibilities()
         return self.calculated_possibilities.clone()
 
-    def get_possibility_inf_mask (self) -> torch.Tensor:
-        mask = torch.zeros(64).to(self.device)
+    def get_possibility_inf_mask(self) -> torch.Tensor:
         self.generate_possibilities()
-        mask[self.calculated_possibilities == 0] = float ('-inf')
-        return mask
+        return torch.where(
+            self.calculated_possibilities == 0,
+            torch.tensor(float('-inf')),
+            torch.tensor(0.0)
+        )
 
     def place_from_probabilities (self, probabilities: torch.Tensor) -> int:
         # Plays a turn by the current player by sampling from given probabilities of
