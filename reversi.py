@@ -126,11 +126,9 @@ class Reversi:
 
     def get_labeled_fields (self) -> list[torch.Tensor]:
         # Creates a list that indexed by player color returns their board
-
         fields: list[torch.Tensor] = [torch.Tensor(), torch.Tensor()]
         fields[self.current_player] = self.current_player_board
         fields[self.current_player ^ 1] = self.other_player_board
-
         return fields
 
     def get_game_scores(self) -> torch.Tensor:
@@ -144,8 +142,7 @@ class Reversi:
     def get_game_state (self) -> tuple[int, torch.Tensor]:
         # Returns current player and the number of tokens 
         # on the board of each player as a tensor
-        scores = self.get_game_scores()
-        return (self.current_player, scores)
+        return (self.current_player, self.get_game_scores())
 
     def get_player_num_tokens (self, player: int) -> torch.Tensor:
         return torch.tensor(float(self.current_player_bitboard.bit_count() 
@@ -268,8 +265,7 @@ class Reversi:
         return self.finished
 
     def get_winner(self) -> int:
-        _, score = self.get_game_state()
-        return int(torch.argmax(score))
+        return int(torch.argmax(self.get_game_scores()))
 
     def write (self, show_possibilities: bool = True) -> None:
 
