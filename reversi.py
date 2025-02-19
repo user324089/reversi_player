@@ -120,7 +120,7 @@ class Reversi:
 
         self.current_player_board, self.other_player_board = self.other_player_board, self.current_player_board
         self.current_player_bitboard, self.other_player_bitboard = self.other_player_bitboard, self.current_player_bitboard
-        self.current_player = BLACK+WHITE - self.current_player
+        self.current_player = self.current_player ^ 1
 
         self.calculated_possibilities = None
 
