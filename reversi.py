@@ -13,6 +13,17 @@ STARTING_NUM_FREE_FIELDS = SIDE*SIDE - len(STARTING_BLACK_FIELDS) - len(STARTING
 
 class Reversi:
 
+    __slots__ = [
+        'current_player_board', 
+        'other_player_board', 
+        'current_player_bitboard', 
+        'other_player_bitboard', 
+        'current_player', 
+        'finished', 
+        'calculated_possibilities', 
+        'device'
+    ]
+
     def __init__(self, device='cpu') -> None:
         # Board is zeros where there is no token, and ones where there is token.
         # current_player_board is the board of currently deciding player's tokens,
