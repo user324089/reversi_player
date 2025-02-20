@@ -152,7 +152,7 @@ class Reversi:
     def generate_possibilities(self) -> None:
         # Generates the places where current player can place their token
         if self.calculated_possibilities is None:
-            self.calculated_possibilities = bb.bitboard_to_board(self.get_all_moves())
+            self.calculated_possibilities = bb.bitboard_to_board(self.get_all_moves()).to(self.device)
 
     def get_possibilities (self) -> torch.Tensor:
         # Returns the places where current player can place their token
@@ -166,14 +166,14 @@ class Reversi:
             self.calculated_possibilities == 0,
             torch.tensor(float('-inf')),
             torch.tensor(0.0)
-        )
+        ).to(self.device)
 
     def place_from_probabilities (self, probabilities: torch.Tensor) -> int:
         # Plays a turn by the current player by sampling from given probabilities of
         # legal fields
 
         mask = self.get_possibilities ()
-        masked_probabilities = mask * probabilities.to('cpu')
+        masked_probabilities = mask * probabilities
         masked_probabilities_sum = torch.sum (masked_probabilities)
         if (masked_probabilities_sum == 0):
             masked_probabilities[:] = mask/torch.sum(mask)
@@ -186,7 +186,7 @@ class Reversi:
         return index
 
     def make_random_move (self) -> int:
-        return self.place_from_probabilities (torch.ones (SIDE**2))
+        return self.place_from_probabilities (torch.ones (SIDE**2).to(self.device))
 
     def place_optimal (self, values: torch.Tensor):
         mask = self.get_possibility_inf_mask()
