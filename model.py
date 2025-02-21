@@ -40,5 +40,36 @@ class Reversi_AI_DQN (torch.nn.Module):
         x = self.last_layer (x)
         return x
 
-def create_model () -> Reversi_AI_DQN:
+class Reversi_AI_policy (torch.nn.Module):
+
+    def __init__ (self, num_blocks: int, hidden_layer_width: int) -> None:
+        super().__init__()
+
+        self.first_layer = torch.nn.Sequential(
+                torch.nn.Linear (SIDE*SIDE*2, hidden_layer_width),
+                torch.nn.ReLU()
+                )
+
+        self.middle_layers = torch.nn.Sequential (
+                *[
+                    Linear_skip_block (hidden_layer_width)
+                    for _ in range (num_blocks)
+                    ]
+                )
+
+        self.last_layer = torch.nn.Linear (hidden_layer_width, SIDE*SIDE)
+        self.soft_max = torch.nn.Softmax (dim=0)
+
+    def forward (self, x, mask) -> torch.Tensor:
+        x = self.first_layer (x)
+        x = self.middle_layers(x)
+        x = self.last_layer (x)
+        x += mask
+        x = self.soft_max (x)
+        return x
+
+def create_model_policy () -> Reversi_AI_policy:
+    return Reversi_AI_policy(2,300)
+
+def create_model_DQN () -> Reversi_AI_DQN:
     return Reversi_AI_DQN(1,200)
