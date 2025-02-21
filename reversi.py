@@ -168,7 +168,7 @@ class Reversi:
             torch.tensor(0.0)
         ).to(self.device)
 
-    def place_from_probabilities (self, probabilities: torch.Tensor) -> int:
+    def place_from_probabilities (self, probabilities: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Plays a turn by the current player by sampling from given probabilities of
         # legal fields
 
@@ -180,13 +180,14 @@ class Reversi:
         else:
             masked_probabilities /= masked_probabilities_sum
         dist = torch.distributions.categorical.Categorical (masked_probabilities)
-        index = int(dist.sample())
+        index = dist.sample()
 
-        self.place(index)
-        return index
+        self.place(int(index))
+        return index, dist.log_prob(index)
 
-    def make_random_move (self) -> int:
-        return self.place_from_probabilities (torch.ones (SIDE**2).to(self.device))
+    def make_random_move (self) -> torch.Tensor:
+        move_made, _ = self.place_from_probabilities (torch.ones (SIDE**2).to(self.device))
+        return move_made
 
     def place_optimal (self, values: torch.Tensor):
         mask = self.get_possibility_inf_mask()

@@ -95,7 +95,7 @@ class AI_trainer:
             elif (move_version_rand_float < RANDOM_MOVE_PROBABILITY + EXPLORING_MOVE_PROBABILITY):
                 field_values = self.game.get_possibility_inf_mask() + q_scores
                 explored_bound = torch.topk (field_values, k=EXPLORING_K)[0][-1]
-                move_taken = self.game.place_from_probabilities (field_values >= explored_bound)
+                move_taken, _ = self.game.place_from_probabilities (field_values >= explored_bound)
             else:
                 move_taken = self.game.place_optimal (q_scores)
 
