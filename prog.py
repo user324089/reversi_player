@@ -160,11 +160,14 @@ def train_AI_policy (model: Reversi_AI_policy, num_epochs: int, games_per_epoch,
 
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float)
 
+        moves_made: float = 0
+
         for _ in range (games_per_epoch):
             game: Reversi = randomize_game()
             states: list[tuple[int, torch.Tensor]] = []
             log_probs: list[torch.Tensor] = []
             while (not game.is_finished()):
+                moves_made += 1
                 states.append (game.get_game_state())
                 board_state = game.get_board_state()
                 move_probabilities = model(board_state, game.get_possibility_inf_mask())
@@ -180,7 +183,7 @@ def train_AI_policy (model: Reversi_AI_policy, num_epochs: int, games_per_epoch,
 
                 loss -= log_prob * total_reward
 
-        loss /= games_per_epoch
+        loss /= moves_made
 
         loss.backward()
 
