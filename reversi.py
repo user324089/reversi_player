@@ -94,8 +94,8 @@ class Reversi:
     def get_labeled_fields (self) -> list[torch.Tensor]:
         # Creates a list that indexed by player color returns their board
         fields: list[torch.Tensor] = [torch.Tensor(), torch.Tensor()]
-        fields[self.current_player] = self.current_player_board
-        fields[self.current_player ^ 1] = self.other_player_board
+        fields[self.current_player] = self.current_player_board.clone()
+        fields[self.current_player ^ 1] = self.other_player_board.clone()
         return fields
 
     def get_game_scores(self) -> torch.Tensor:
