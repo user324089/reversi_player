@@ -89,26 +89,15 @@ class AI_trainer_DQN:
 
             q_scores = model(state)
 
-            move_version_rand_float = random.random()
-            if (move_version_rand_float < RANDOM_MOVE_PROBABILITY):
-                move_taken = self.game.make_random_move()
-            elif (move_version_rand_float < RANDOM_MOVE_PROBABILITY + EXPLORING_MOVE_PROBABILITY):
-                field_values = self.game.get_possibility_inf_mask() + q_scores
-                explored_bound = torch.topk (field_values, k=EXPLORING_K)[0][-1]
-                move_taken, _ = self.game.place_from_probabilities (field_values >= explored_bound)
-            else:
-                move_taken = self.game.place_optimal (q_scores)
+            move_taken = self.game.place_optimal (q_scores)
 
             self.action_dataset[self.num_trained_moves % REPLAY_BUFFER_SIZE] = move_taken
 
             while ((not self.game.is_finished()) and self.game.current_player != self.LEARNING_MODEL_PLAYER):
-                if (random.random() < RANDOM_OPPONENT_MOVE_PROBABILITY):
-                    self.game.make_random_move()
-                else:
-                    self.game.place_optimal(self.opponent_model(self.game.get_board_state()))
+                self.game.make_random_move()
 
-            #after_move_score = game.get_player_num_tokens (LEARNING_MODEL_PLAYER)
-            self.reward_dataset[self.num_trained_moves%REPLAY_BUFFER_SIZE] = 0 #after_move_score - before_move_score
+            after_move_score = self.game.get_player_num_tokens (self.LEARNING_MODEL_PLAYER)
+            self.reward_dataset[self.num_trained_moves%REPLAY_BUFFER_SIZE] = after_move_score - before_move_score
             self.is_finished_dataset[self.num_trained_moves%REPLAY_BUFFER_SIZE] = self.game.is_finished()
             self.next_state_dataset[self.num_trained_moves%REPLAY_BUFFER_SIZE] = self.game.get_board_state()
             self.next_state_valid_mask_dataset[self.num_trained_moves%REPLAY_BUFFER_SIZE] = self.game.get_possibility_inf_mask()
@@ -224,8 +213,8 @@ def main_policy ():
         torch.save(model.state_dict(), 'model_weights_policy.pth')
 
 def main ():
-    main_policy()
-    #main_DQN()
+    #main_policy()
+    main_DQN()
 
 
 main()
