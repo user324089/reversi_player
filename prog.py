@@ -181,18 +181,19 @@ def train_AI_policy (model: Reversi_AI_policy, num_epochs: int, games_per_epoch,
 def main_DQN ():
     model = create_model_DQN()
     model.to(DEVICE)
-    optim = torch.optim.AdamW (model.parameters())
+    optim = torch.optim.AdamW (model.parameters(), lr=1e-5)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=0.95)
     trainer: AI_trainer_DQN = AI_trainer_DQN(target_net_delay=300, opponent_model_delay=5000)
 
     if os.path.exists('model_weights_dqn.pth'):
         model.load_state_dict(torch.load('model_weights_dqn.pth', weights_only=True))
 
-    torch.manual_seed (0);
     accuracy = test_model_DQN (model, 100)
     print ('start accuracy:', accuracy)
     while (True):
-        torch.manual_seed (0);
+        print ('current lr:', scheduler.get_last_lr())
         trainer.train (model, 20000, optim)
+        scheduler.step()
         accuracy = test_model_DQN (model, 100)
         print ('end accuracy:', accuracy)
         torch.save(model.state_dict(), 'model_weights_dqn.pth')
