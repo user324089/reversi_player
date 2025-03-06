@@ -1,1 +1,3 @@
 __pycache__
+model_weights_dqn.pth
+model_weights_policy.pth
