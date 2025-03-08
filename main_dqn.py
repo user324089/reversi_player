@@ -4,14 +4,22 @@ import copy
 import random
 from common import *
 import os
+import dotenv
+import sys
 
+# default values
 BEGINNING_RANDOM_MOVE_MAX_COUNT = 40
 
 REPLAY_BUFFER_SIZE = 3000
 LEARNING_BATCH_SIZE = 500
 
-WINNING_REWARD = 40
-LOSING_REWARD = -40
+WINNING_REWARD = 10
+LOSING_REWARD = -10
+
+STARTING_LEARNING_RATE = 5e-6
+LEARNING_RATE_DECREASE_EXPONENT = 0.9
+
+TARGET_NET_DELAY = 1000
 
 def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
 
@@ -106,12 +114,56 @@ class AI_trainer_DQN:
             loss.backward()
             optimiser.step()
 
+def load_env_variables ():
+    dotenv.load_dotenv()
+
+    try:
+        win_reward = os.getenv ('DQN_WIN_REWARD')
+        if win_reward is not None:
+            global WINNING_REWARD
+            WINNING_REWARD = int(win_reward)
+        lose_reward = os.getenv ('DQN_LOSE_REWARD')
+        if lose_reward is not None:
+            global LOSING_REWARD
+            LOSING_REWARD = int(lose_reward)
+        random_move_count = os.getenv ('DQN_RANDOM_MOVE_COUNT')
+        if random_move_count is not None:
+            global BEGINNING_RANDOM_MOVE_MAX_COUNT
+            BEGINNING_RANDOM_MOVE_MAX_COUNT = int(random_move_count)
+        replay_buffer_size = os.getenv ('DQN_REPLAY_BUFFER_SIZE')
+        if replay_buffer_size is not None:
+            global REPLAY_BUFFER_SIZE
+            REPLAY_BUFFER_SIZE = int(replay_buffer_size)
+        learning_batch_size = os.getenv ('DQN_BATCH_SIZE')
+        if learning_batch_size is not None:
+            global LEARNING_BATCH_SIZE
+            LEARNING_BATCH_SIZE = int (learning_batch_size)
+        start_learning_rate = os.getenv ('DQN_START_LEARNING_RATE')
+        if start_learning_rate is not None:
+            global STARTING_LEARNING_RATE
+            STARTING_LEARNING_RATE = float(start_learning_rate)
+        learning_rate_decrease_exponent = os.getenv ('DQN_LR_DECREASE_EXPONENT')
+        if learning_rate_decrease_exponent is not None:
+            global LEARNING_RATE_DECREASE_EXPONENT
+            LEARNING_RATE_DECREASE_EXPONENT = float (learning_rate_decrease_exponent)
+        target_net_delay = os.getenv ('DQN_TARGET_NET_DELAY')
+        if target_net_delay is not None:
+            global TARGET_NET_DELAY
+            TARGET_NET_DELAY = int(target_net_delay)
+
+    except ValueError:
+        print ('failed to parse env variables')
+        sys.exit (1)
+
 def main ():
+
+    load_env_variables ()
+
     model = create_model_DQN()
     model.to(DEVICE)
-    optim = torch.optim.AdamW (model.parameters(), lr=1e-5)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=0.95)
-    trainer: AI_trainer_DQN = AI_trainer_DQN(target_net_delay=300, opponent_model_delay=5000)
+    optim = torch.optim.AdamW (model.parameters(), lr=STARTING_LEARNING_RATE)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=LEARNING_RATE_DECREASE_EXPONENT)
+    trainer: AI_trainer_DQN = AI_trainer_DQN(target_net_delay=TARGET_NET_DELAY, opponent_model_delay=5000)
 
     if os.path.exists('model_weights_dqn.pth'):
         model.load_state_dict(torch.load('model_weights_dqn.pth', weights_only=True))
