@@ -21,6 +21,10 @@ LEARNING_RATE_DECREASE_EXPONENT = 0.9
 
 TARGET_NET_DELAY = 1000
 
+NUM_OPPONENT_SUGGESTED_FIELDS = 3
+OPPONENT_SUGGESTION_STRENGTH=0.5
+SELF_PLAY_THRESHOLD = 0.9
+
 def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
 
     model.eval()
@@ -39,9 +43,8 @@ def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
 
 
 class AI_trainer_DQN:
-    def __init__(self, target_net_delay: int, opponent_model_delay: int):
+    def __init__(self, target_net_delay: int):
         self.target_net_delay: int = target_net_delay
-        self.opponent_model_delay: int = opponent_model_delay
         self.num_trained_moves: int = 0
 
         self.state_dataset = torch.empty(REPLAY_BUFFER_SIZE, 2*SIDE*SIDE).to(DEVICE)
@@ -55,13 +58,8 @@ class AI_trainer_DQN:
         self.LEARNING_MODEL_PLAYER = self.game.current_player
 
 
-    def train (self, model: Reversi_AI_DQN, num_moves: int, optimiser: torch.optim.Optimizer):
+    def train (self, model: Reversi_AI_DQN, num_moves: int, optimiser: torch.optim.Optimizer, is_self_play: bool):
         for _ in tqdm(range (num_moves)):
-
-            if self.num_trained_moves % self.opponent_model_delay == 0:
-                self.opponent_model = copy.deepcopy(model)
-                self.opponent_model.requires_grad_(False)
-                self.opponent_model.eval()
 
             if self.num_trained_moves % self.target_net_delay == 0:
                 self.target_model = copy.deepcopy(model)
@@ -81,7 +79,14 @@ class AI_trainer_DQN:
             self.action_dataset[self.num_trained_moves % REPLAY_BUFFER_SIZE] = move_taken
 
             while ((not self.game.is_finished()) and self.game.current_player != self.LEARNING_MODEL_PLAYER):
-                self.game.make_random_move()
+                if is_self_play:
+                    enemy_q_scores = model (self.game.get_board_state())
+                    enemy_q_scores += self.game.get_possibility_inf_mask ()
+                    suggested_fields = (enemy_q_scores >= torch.topk (enemy_q_scores, NUM_OPPONENT_SUGGESTED_FIELDS)[0][-1]).to(torch.float)
+                    probabilities = (torch.ones (SIDE*SIDE) + suggested_fields * OPPONENT_SUGGESTION_STRENGTH).to(DEVICE)
+                    self.game.place_from_probabilities (probabilities)
+                else:
+                    self.game.make_random_move()
 
             after_move_score = self.game.get_player_num_tokens (self.LEARNING_MODEL_PLAYER)
             self.reward_dataset[self.num_trained_moves%REPLAY_BUFFER_SIZE] = after_move_score - before_move_score
@@ -150,6 +155,18 @@ def load_env_variables ():
         if target_net_delay is not None:
             global TARGET_NET_DELAY
             TARGET_NET_DELAY = int(target_net_delay)
+        num_opponent_suggested_fields = os.getenv ('DQN_NUM_OPPONENT_SUGGESTED_FIELDS')
+        if num_opponent_suggested_fields is not None:
+            global NUM_OPPONENT_SUGGESTED_FIELDS
+            NUM_OPPONENT_SUGGESTED_FIELDS = int(num_opponent_suggested_fields)
+        opponent_suggestion_strength = os.getenv ('DQN_OPPONENT_SUGGESTION_STRENGTH')
+        if opponent_suggestion_strength is not None:
+            global OPPONENT_SUGGESTION_STRENGTH
+            OPPONENT_SUGGESTION_STRENGTH = float(opponent_suggestion_strength)
+        self_play_threshold = os.getenv ('DQN_SELF_PLAY_THRESHOLD')
+        if self_play_threshold is not None:
+            global SELF_PLAY_THRESHOLD
+            SELF_PLAY_THRESHOLD = float (SELF_PLAY_THRESHOLD)
 
     except ValueError:
         print ('failed to parse env variables')
@@ -163,19 +180,26 @@ def main ():
     model.to(DEVICE)
     optim = torch.optim.AdamW (model.parameters(), lr=STARTING_LEARNING_RATE)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=LEARNING_RATE_DECREASE_EXPONENT)
-    trainer: AI_trainer_DQN = AI_trainer_DQN(target_net_delay=TARGET_NET_DELAY, opponent_model_delay=5000)
+    trainer: AI_trainer_DQN = AI_trainer_DQN(target_net_delay=TARGET_NET_DELAY)
 
     if os.path.exists('model_weights_dqn.pth'):
         model.load_state_dict(torch.load('model_weights_dqn.pth', weights_only=True))
 
-    accuracy = test_model_DQN (model, 100)
+    is_self_play = False
+
+    accuracy = test_model_DQN (model, 1000)
+    if (accuracy > SELF_PLAY_THRESHOLD):
+        is_self_play = True
+
     print ('start accuracy:', accuracy)
     while (True):
         print ('current lr:', scheduler.get_last_lr())
-        trainer.train (model, 20000, optim)
+        trainer.train (model, 20000, optim, is_self_play)
         scheduler.step()
-        accuracy = test_model_DQN (model, 100)
+        accuracy = test_model_DQN (model, 1000)
         print ('end accuracy:', accuracy)
+        if (accuracy > SELF_PLAY_THRESHOLD):
+            is_self_play = True
         torch.save(model.state_dict(), 'model_weights_dqn.pth')
 
 if __name__ == '__main__':
