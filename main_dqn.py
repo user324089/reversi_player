@@ -25,6 +25,8 @@ NUM_OPPONENT_SUGGESTED_FIELDS = 3
 OPPONENT_SUGGESTION_STRENGTH=0.5
 SELF_PLAY_THRESHOLD = 0.9
 
+EXPLORATORY_MOVE_PROBABILITY=0.05
+
 def test_model_DQN (model: Reversi_AI_DQN, num_games: int):
 
     model.eval()
@@ -74,7 +76,10 @@ class AI_trainer_DQN:
 
             q_scores = model(state)
 
-            move_taken = self.game.place_optimal (q_scores)
+            if (random.random() <= EXPLORATORY_MOVE_PROBABILITY):
+                move_taken = self.game.make_random_move()
+            else:
+                move_taken = self.game.place_optimal (q_scores)
 
             self.action_dataset[self.num_trained_moves % REPLAY_BUFFER_SIZE] = move_taken
 

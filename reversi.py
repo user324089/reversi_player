@@ -191,8 +191,8 @@ class Reversi:
 
     def place_optimal (self, values: torch.Tensor):
         mask = self.get_possibility_inf_mask()
-        index = int(torch.argmax(values + mask))
-        self.place(index)
+        index = torch.argmax(values + mask)
+        self.place(int(index))
         return index
 
     def is_finished (self):
